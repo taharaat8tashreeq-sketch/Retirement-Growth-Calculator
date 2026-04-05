@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retirement Comparison Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; padding: 20px; color: #1a1a1a; }
+        .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; max-width: 1400px; margin: auto; }
+        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: fit-content; }
+
+        /* Scenario Cards */
+        .scenario-card { border: 1px solid #e1e4e8; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; transition: transform 0.1s; }
+        .scenario-header { display: flex; align-items: center; margin-bottom: 12px; gap: 10px; }
+        .name-input { border: none; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 1.1rem; width: 100%; outline: none; padding: 2px; }
+        .name-input:focus { border-bottom-color: #3498db; }
+
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: #666; display: block; margin-bottom: 4px; }
+        input[type="number"] { width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+
+        .add-btn { background: #2ecc71; color: white; width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .remove-btn { background: #ff7675; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.7rem; }
+
+        /* Chart Area */
+        .main-display { display: flex; flex-direction: column; gap: 20px; }
+        .chart-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); min-height: 450px; }
+
+        /* Summary Table */
+        .summary-table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .summary-table th, .summary-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .summary-table th { background: #f8f9fa; font-size: 0.85rem; color: #666; }
+        .ending-val { font-weight: bold; color: #2ecc71; }
+    </style>
+</head>
+<body>
+
+<div class="layout">
+    <div class="panel">
+        <h2 style="margin-top:0">Parameters</h2>
+        <div id="scenario-list"></div>
+        <button class="add-btn" onclick="addScenario()">+ Add Profile</button>
+    </div>
+
+    <div class="main-display">
+        <div class="chart-container">
+            <canvas id="compChart"></canvas>
+        </div>
+
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th>Scenario Name</th>
+                    <th>Annual Contribution</th>
+                    <th>Final Balance (Age 65)</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let scenarios = [
+        { id: 1, name: "Plan A", s: 10000, sa: 25, r: 7, hs: 35, t: 40, ac: 10, color: '#3498db' },
+        { id: 2, name: "Plan B", s: 10000, sa: 35, r: 7, hs: 35, t: 40, ac: 15, color: '#e67e22' }
+    ];
+    let chart;
+
+    function addScenario() {
+        const colors = ['#2ecc71', '#9b59b6', '#e74c3c', '#f1c40f', '#1abc9c', '#34495e'];
+        const randomColor = colors[scenarios.length % colors.length];
+        scenarios.push({
+            id: Date.now(),
+            name: `Scenario ${scenarios.length + 1}`,
+            s: 5000, sa: 30, r: 6, hs: 30, t: 40, ac: 10,
+            color: randomColor
+        });
+        renderUI();
+        updateChart();
+    }
+
+    function removeScenario(id) {
+        if (scenarios.length > 1) {
+            scenarios = scenarios.filter(s => s.id !== id);
+            renderUI();
+            updateChart();
+        }
+    }
+
+    function updateValue(id, field, value) {
+        const scen = scenarios.find(s => s.id === id);
+        if (field === 'name') {
+            scen.name = value;
+        } else {
+            scen[field] = parseFloat(value) || 0;
+        }
+        updateChart(); // Redraw chart immediately
+    }
+
+    function renderUI() {
+        const list = document.getElementById('scenario-list');
+        list.innerHTML = '';
+        scenarios.forEach(scen => {
+            const card = document.createElement('div');
+            card.className = 'scenario-card';
+            card.style.borderLeft = `6px solid ${scen.color}`;
+            card.innerHTML = `
+                <div class="scenario-header">
+                    <input type="text" class="name-input" value="${scen.name}"
+                        oninput="updateValue(${scen.id}, 'name', this.value)" placeholder="Enter Name...">
+                    <button class="remove-btn" onclick="removeScenario(${scen.id})">✕</button>
+                </div>
+                <div class="input-grid">
+                    <div><label>Start Balance ($)</label><input type="number" value="${scen.s}" oninput="updateValue(${scen.id}, 's', this.value)"></div>
+                    <div><label>Start Age</label><input type="number" value="${scen.sa}" oninput="updateValue(${scen.id}, 'sa', this.value)"></div>
+                    <div><label>Return (%)</label><input type="number" step="0.1" value="${scen.r}" oninput="updateValue(${scen.id}, 'r', this.value)"></div>
+                    <div><label>Wage ($/hr)</label><input type="number" value="${scen.hs}" oninput="updateValue(${scen.id}, 'hs', this.value)"></div>
+                    <div><label>Hours/Wk</label><input type="number" value="${scen.t}" oninput="updateValue(${scen.id}, 't', this.value)"></div>
+                    <div><label>Contrib (%)</label><input type="number" value="${scen.ac}" oninput="updateValue(${scen.id}, 'ac', this.value)"></div>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function updateChart() {
+        const ctx = document.getElementById('compChart').getContext('2d');
+        const tableBody = document.getElementById('table-body');
+        tableBody.innerHTML = '';
+
+        const datasets = scenarios.map(scen => {
+            const pmt = (scen.hs * scen.t * 52) * (scen.ac / 100);
+            const r = scen.r / 100;
+            const plotData = [];
+            let balance = 0;
+
+            for (let age = 18; age <= 65; age++) {
+                if (age < scen.sa) {
+                    plotData.push({ x: age, y: null });
+                } else if (age === scen.sa) {
+                    balance = scen.s + pmt;
+                    plotData.push({ x: age, y: balance });
+                } else {
+                    balance = (balance * (1 + r)) + pmt;
+                    plotData.push({ x: age, y: balance });
+                }
+            }
+
+            // Append to table
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td><span style="color:${scen.color}">●</span> ${scen.name}</td>
+                <td>$${pmt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                <td class="ending-val">$${Math.round(balance).toLocaleString()}</td>
+            `;
+
+            return {
+                label: scen.name,
+                data: plotData,
+                borderColor: scen.color,
+                backgroundColor: scen.color + '15',
+                fill: true,
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 5
+            };
+        });
+
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { type: 'linear', min: 18, max: 65, title: { display: true, text: 'Age' } },
+                    y: {
+                        ticks: { callback: v => '$' + v.toLocaleString() },
+                        title: { display: true, text: 'Portfolio Value' }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.dataset.label}: $${Math.round(ctx.parsed.y).toLocaleString()}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Initial render
+    renderUI();
+    updateChart();
+</script>
+
+</body>
+</html>
